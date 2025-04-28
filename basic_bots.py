@@ -1,7 +1,7 @@
 import asyncio
 
 from poke_env import AccountConfiguration, ShowdownServerConfiguration
-from poke_env.player import RandomPlayer, Player, SimpleHeuristicsPlayer
+from poke_env.player import RandomPlayer, Player, SimpleHeuristicsPlayer, MaxBasePowerPlayer
 
 # class MaxDamagePlayer(Player):
 #     def choose_move(self, battle):
@@ -20,15 +20,15 @@ from poke_env.player import RandomPlayer, Player, SimpleHeuristicsPlayer
 #             return self.choose_random_move(battle)
 
 async def main():
-    random_player = RandomPlayer()
-    random_player_2 = RandomPlayer()
+    p1 = SimpleHeuristicsPlayer(battle_format='gen8randombattle')
+    p2 = MaxBasePowerPlayer(battle_format='gen8randombattle')
 
     # max_damage_player = MaxDamagePlayer()
 
-    await random_player.battle_against(random_player_2, n_battles=50)
+    await p1.battle_against(p2, n_battles=50)
 
     print(
-        f'Player {random_player.username} won {random_player.n_won_battles} out of {random_player.n_finished_battles} played'
+        f'Player {p1.username} won {p1.n_won_battles} out of {p1.n_finished_battles} played'
     )
 
 if __name__ == '__main__':

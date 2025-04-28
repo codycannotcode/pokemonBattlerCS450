@@ -1,13 +1,13 @@
 import os
 
 import numpy as np
-from stable_baselines3 import A2C
+from stable_baselines3 import A2C, PPO
 from stable_baselines3.common.monitor import Monitor
 from stable_baselines3.common.callbacks import EvalCallback
 from gymnasium.spaces import Box
 from poke_env.data import GenData
 
-from poke_env.player import RandomPlayer, Gen8EnvSinglePlayer, SimpleHeuristicsPlayer
+from poke_env.player import Gen8EnvSinglePlayer, SimpleHeuristicsPlayer, MaxBasePowerPlayer
 
 
 # We define our RL player
@@ -87,7 +87,37 @@ def a2c_train(env, total_timesteps):
     )
 
     model.learn(total_timesteps=total_timesteps, callback=eval_callback)
+
+    # evaluate final time after training finishes 
+    eval_callback.on_training_end()
+
     model.save('a2c_pokemon_model')
+
+# quick copy + paste, maybe make modular later (michael did already i think)
+def ppo_train(env, total_timesteps):
+    log_dir = './ppo_pokemon_tensorboard'
+
+    model = PPO("MlpPolicy", env, verbose=1, tensorboard_log=log_dir)
+
+    eval_env = SimpleRLPlayer(opponent=MaxBasePowerPlayer(battle_format='gen8randombattle'))
+    eval_env = Monitor(eval_env)
+
+    eval_callback = EvalCallback(
+        eval_env,
+        best_model_save_path=os.path.join(log_dir, 'best_model'),
+        log_path=log_dir,
+        eval_freq=25_000,
+        deterministic=True,
+        render=False,
+        n_eval_episodes=20,
+    )
+
+    model.learn(total_timesteps=total_timesteps, callback=eval_callback)
+
+    # evaluate final time after training finishes 
+    eval_callback.on_training_end()
+
+    model.save('ppo_pokemon_model')
 
 # evaluates the model by seeing how many times it can win against the SimpleHeuristicBot
 # battles is the number of battles to evaluate with
@@ -103,6 +133,7 @@ def a2c_evaluation(env: SimpleRLPlayer, model: A2C, battles):
 
         if done:
             finished_battles += 1
+            print(f"EPISODE {finished_battles}")
             obs, _ = env.reset()
             if finished_battles >= battles:
                 break
@@ -113,19 +144,20 @@ def a2c_evaluation(env: SimpleRLPlayer, model: A2C, battles):
     )
 
 
-NB_TRAINING_STEPS = 20_000
+NB_TRAINING_STEPS = 25_000
 TEST_EPISODES = 100
 GEN_8_DATA = GenData.from_gen(8)
 
 if __name__ == "__main__":
     simpleHeuristicsPlayer = SimpleHeuristicsPlayer(battle_format='gen8randombattle')
+    maxBasePowerPlayer = MaxBasePowerPlayer(battle_format='gen8randombattle')
 
-    env = SimpleRLPlayer(opponent=simpleHeuristicsPlayer)
+    env = SimpleRLPlayer(opponent=maxBasePowerPlayer)
 
     # train the bot
-    a2c_train(env, NB_TRAINING_STEPS)
+    # ppo_train(env, NB_TRAINING_STEPS)
 
     # evaluate the bot
-    # model = A2C.load('a2c_pokemon_model')
-    # a2c_evaluation(env, model, TEST_EPISODES)
+    model = PPO.load('ppo_pokemon_model')
+    a2c_evaluation(env, model, TEST_EPISODES)
 

@@ -1,9 +1,10 @@
 import numpy as np
 from stable_baselines3 import A2C
+from stable_baselines3.common.monitor import Monitor
 from gymnasium.spaces import Box
 from poke_env.data import GenData
 
-from poke_env.player import Gen9EnvSinglePlayer, RandomPlayer, Gen8EnvSinglePlayer
+from poke_env.player import RandomPlayer, Gen8EnvSinglePlayer, SimpleHeuristicsPlayer
 
 
 # We define our RL player
@@ -58,44 +59,47 @@ class SimpleRLPlayer(Gen8EnvSinglePlayer):
         )
 
 
-class MaxDamagePlayer(RandomPlayer):
-    def choose_move(self, battle):
-        # If the player can attack, it will
-        if battle.available_moves:
-            # Finds the best move among available ones
-            best_move = max(battle.available_moves, key=lambda move: move.base_power)
-            return self.create_order(best_move)
+# class MaxDamagePlayer(RandomPlayer):
+#     def choose_move(self, battle):
+#         # If the player can attack, it will
+#         if battle.available_moves:
+#             # Finds the best move among available ones
+#             best_move = max(battle.available_moves, key=lambda move: move.base_power)
+#             return self.create_order(best_move)
 
-        # If no attack is available, a random switch will be made
-        else:
-            return self.choose_random_move(battle)
+#         # If no attack is available, a random switch will be made
+#         else:
+#             return self.choose_random_move(battle)
 
-
-NB_TRAINING_STEPS = 10000
-NB_EVALUATION_EPISODES = 100
-
-np.random.seed(0)
-
-
-model_store = {}
+# np.random.seed(0)
 
 # This is the function that will be used to train the a2c
-def a2c_training(player, nb_steps):
-    model = A2C("MlpPolicy", player, verbose=1)
-    model.learn(total_timesteps=10_000)
-    model_store[player] = model
+def a2c_train(env, total_timesteps):
+    env = Monitor(env)
+
+    model = A2C("MlpPolicy", env, verbose=1, tensorboard_log='./a2c_pokemon_tensorboard')
+    model.learn(total_timesteps=total_timesteps)
+    model.save('a2c_pokemon_model')
     
+def a2c_evaluation(env: SimpleRLPlayer, model: A2C, battles):
+    finished_battles = 0
 
+    env.reset_battles()
+    obs, _ = env.reset()
+    
+    while finished_battles < battles:
+        action, _ = model.predict(obs, deterministic=True)
+        obs, reward, done, _, info = env.step(action)
 
-def a2c_evaluation(player, nb_episodes):
-    # Reset battle statistics
-    model = model_store[player]
-    player.reset_battles()
-    model.test(player, nb_episodes=nb_episodes, visualize=False, verbose=False)
+        if done:
+            finished_battles += 1
+            obs, _ = env.reset()
+            if finished_battles >= battles:
+                break
 
     print(
         "A2C Evaluation: %d victories out of %d episodes"
-        % (player.n_won_battles, nb_episodes)
+        % (env.n_won_battles, battles)
     )
 
 
@@ -104,55 +108,14 @@ TEST_EPISODES = 100
 GEN_8_DATA = GenData.from_gen(8)
 
 if __name__ == "__main__":
-    opponent = RandomPlayer(battle_format='gen8randombattle')
-    second_opponent = MaxDamagePlayer(battle_format='gen8randombattle')
-    env_player = SimpleRLPlayer(opponent=second_opponent)
+    simpleHeuristicsPlayer = SimpleHeuristicsPlayer(battle_format='gen8randombattle')
+
+    env = SimpleRLPlayer(opponent=simpleHeuristicsPlayer)
 
     # train the bot
-    model = A2C("MlpPolicy", env_player, verbose=1)
-    model.learn(total_timesteps=NB_TRAINING_STEPS)
+    a2c_train(env, NB_TRAINING_STEPS)
 
-    # obs, reward, done, _, info = env_player.step(0)
-    # while not done:
-    #     action, _ = model.predict(obs, deterministic=True)
-    #     obs, reward, done, _, info = env_player.step(action)
+    # model = A2C.load('a2c_pokemon_model')
 
-    # test the bot's performance
-    finished_episodes = 0
+    # a2c_evaluation(env, model, 100)
 
-    # env_player.reset_battles()
-    obs, _ = env_player.reset()
-
-    done = False
-    while True:
-        if done or env_player.current_battle.finished:
-            finished_episodes += 1
-            if finished_episodes >= TEST_EPISODES:
-                break
-            obs, _ = env_player.reset()
-            print(f"EPISODE {finished_episodes}")
-            done = False
-
-        action, _ = model.predict(obs, deterministic=True)
-        obs, reward, done, _, info = env_player.step(action)
-
-        
-
-    print("Won", env_player.n_won_battles, "battles against", env_player._opponent)
-
-    finished_episodes = 0
-    # env_player._opponent = second_opponent
-
-    # env_player.reset_battles()
-    # obs, _ = env_player.reset()
-    # while True:
-    #     action, _ = model.predict(obs, deterministic=True)
-    #     obs, reward, done, _, info = env_player.step(action)
-
-    #     if done:
-    #         finished_episodes += 1
-    #         obs, _ = env_player.reset()
-    #         if finished_episodes >= TEST_EPISODES:
-    #             break
-
-    # print("Won", env_player.n_won_battles, "battles against", env_player._opponent)

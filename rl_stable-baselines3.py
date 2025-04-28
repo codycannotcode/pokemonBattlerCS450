@@ -1,6 +1,9 @@
+import os
+
 import numpy as np
 from stable_baselines3 import A2C
 from stable_baselines3.common.monitor import Monitor
+from stable_baselines3.common.callbacks import EvalCallback
 from gymnasium.spaces import Box
 from poke_env.data import GenData
 
@@ -58,29 +61,36 @@ class SimpleRLPlayer(Gen8EnvSinglePlayer):
             dtype=np.float32,
         )
 
+# Creates an A2C model, trains it, and then logs the results into the a tensorboard directory.
+# after the model is finished training, it is saved into the file a2c_pokemon_model.zip
+# env is a gymnasium environment, should input the SimpleRlPlayer here
+# during or after training, you can view the model's progress with tensorboard
+# https://stable-baselines3.readthedocs.io/en/master/guide/tensorboard.html
 
-# class MaxDamagePlayer(RandomPlayer):
-#     def choose_move(self, battle):
-#         # If the player can attack, it will
-#         if battle.available_moves:
-#             # Finds the best move among available ones
-#             best_move = max(battle.available_moves, key=lambda move: move.base_power)
-#             return self.create_order(best_move)
-
-#         # If no attack is available, a random switch will be made
-#         else:
-#             return self.choose_random_move(battle)
-
-# np.random.seed(0)
-
-# This is the function that will be used to train the a2c
+# You can probably change the model type very easily with this code
 def a2c_train(env, total_timesteps):
-    env = Monitor(env)
+    log_dir = './a2c_pokemon_tensorboard'
 
-    model = A2C("MlpPolicy", env, verbose=1, tensorboard_log='./a2c_pokemon_tensorboard')
-    model.learn(total_timesteps=total_timesteps)
+    model = A2C("MlpPolicy", env, verbose=1, tensorboard_log=log_dir)
+
+    eval_env = SimpleRLPlayer(opponent=SimpleHeuristicsPlayer(battle_format='gen8randombattle'))
+    eval_env = Monitor(eval_env)
+
+    eval_callback = EvalCallback(
+        eval_env,
+        best_model_save_path=os.path.join(log_dir, 'best_model'),
+        log_path=log_dir,
+        eval_freq=10_000,
+        deterministic=True,
+        render=False,
+        n_eval_episodes=20,
+    )
+
+    model.learn(total_timesteps=total_timesteps, callback=eval_callback)
     model.save('a2c_pokemon_model')
-    
+
+# evaluates the model by seeing how many times it can win against the SimpleHeuristicBot
+# battles is the number of battles to evaluate with
 def a2c_evaluation(env: SimpleRLPlayer, model: A2C, battles):
     finished_battles = 0
 
@@ -115,7 +125,7 @@ if __name__ == "__main__":
     # train the bot
     a2c_train(env, NB_TRAINING_STEPS)
 
+    # evaluate the bot
     # model = A2C.load('a2c_pokemon_model')
-
-    # a2c_evaluation(env, model, 100)
+    # a2c_evaluation(env, model, TEST_EPISODES)
 

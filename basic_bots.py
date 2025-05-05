@@ -1,3 +1,5 @@
+# This is an example file which battles two of the built-in bots together.
+
 import asyncio
 
 from poke_env import AccountConfiguration, ShowdownServerConfiguration
